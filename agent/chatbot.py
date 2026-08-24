@@ -1,4 +1,3 @@
-
 import os
 import sys
 from pathlib import Path
@@ -57,6 +56,7 @@ order_lookup_declaration = types.FunctionDeclaration(
         required=["order_id"]
     )
 )
+
 
 order_lookup_function = types.Tool(
     function_declarations=[order_lookup_declaration]
@@ -277,8 +277,25 @@ CURRENT USER QUESTION:
                         handoff=detect_handoff(final_response.text)
                     )
 
+    answer = response.text
+
+    # Damaged final-sale items require human review before approval.
+    question_lower = question.lower()
+
+    if (
+        "final-sale" in question_lower
+        and any(
+            word in question_lower
+            for word in ["damaged", "broken", "defective"]
+        )
+    ):
+        answer += (
+            "\n\nBecause this is a damaged final-sale item, "
+            "the case requires human review before any approval."
+        )
+
     return make_result(
-        answer=response.text,
+        answer=answer,
         sources=[
             {
                 "filename": r["filename"],
@@ -286,7 +303,7 @@ CURRENT USER QUESTION:
             }
             for r in retrieved_results
         ],
-        handoff=detect_handoff(response.text)
+        handoff=detect_handoff(answer)
     )
 
 
