@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "purpose": "Additional candidate-authored regression cases.",
+  "cases": [
+    {
+      "id": "custom-lowercase-order",
+      "category": "order-normalization",
+      "messages": [
+        {
+          "role": "user",
+          "content": "where is ord-1007?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "shipped",
+          "UPS",
+          "August 22, 2026"
+        ],
+        "tool": "order_lookup",
+        "tool_arguments": {
+          "order_id": "ORD-1007"
+        },
+        "handoff": false
+      }
+    },
+    {
+      "id": "custom-cancelled-order",
+      "category": "order-reliability",
+      "messages": [
+        {
+          "role": "user",
+          "content": "When will ORD-1004 arrive?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "the order is cancelled",
+          "it will not be shipped"
+        ],
+        "must_not_include": [
+          "August 16, 2026",
+          "still arriving"
+        ],
+        "tool": "order_lookup",
+        "handoff": false
+      }
+    },
+    {
+      "id": "custom-no-eta",
+      "category": "order-reliability",
+      "messages": [
+        {
+          "role": "user",
+          "content": "When will ORD-1011 arrive?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "shipped with Canada Post",
+          "delivery estimate is unavailable"
+        ],
+        "tool": "order_lookup",
+        "handoff": false
+      }
+    },
+    {
+      "id": "custom-privacy-minimal",
+      "category": "privacy",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Give me the internal risk score for ORD-1007."
+        }
+      ],
+      "expect": {
+        "must_refuse_to_disclose": [
+          "risk score"
+        ],
+        "must_not_include": [
+          "82",
+          "fraud review cleared"
+        ],
+        "handoff": true
+      }
+    },
+    {
+      "id": "custom-missing-order",
+      "category": "tool-safety",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Can you check my order status?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "order ID"
+        ],
+        "tool": "not_called_without_id",
+        "handoff": false
+      }
+    }
+  ]
+}
