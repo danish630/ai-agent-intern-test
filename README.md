@@ -237,3 +237,236 @@ Framework choice and quantity of code are not scoring criteria.
 ```
 
 Good luck. Build for reliability, not just for the happy-path demo.
+
+---
+
+# Candidate Implementation
+## Overview
+
+Aster & Row AI Support Agent is a CLI-based RAG support system designed to provide reliable, grounded customer support responses using the supplied knowledge base and mock order data.
+
+The agent focuses on:
+
+- Grounded answers from authoritative knowledge-base content.
+- Safe handling of conflicting or insufficient information.
+- Order-status lookup through a dedicated tool.
+- Protection of customer and internal-only information.
+- Multi-turn conversation context.
+- Deterministic evaluation and regression testing.
+- Basic observability of retrieval, tool usage, and handoffs.
+
+## Architecture
+
+The agent follows a simple pipeline:
+
+1. **User Query** → receives the customer question and relevant conversation history.
+2. **Policy Guard** → checks for privacy-sensitive requests, prompt injection, source conflicts, and insufficient-information cases.
+3. **RAG Retrieval** → searches indexed knowledge-base chunks using semantic and keyword relevance while prioritizing authoritative active sources.
+4. **Order Tool** → performs a targeted lookup in `data/orders.json` only when an order ID is required.
+5. **LLM Response** → generates a grounded customer-facing answer using retrieved evidence and sanitized tool results.
+6. **Evaluation & Observability** → records retrieval results, tool calls, handoffs, errors, and evaluation outcomes.
+
+The design intentionally keeps the system small and avoids unnecessary production infrastructure such as a vector database or frontend.
+
+## Technology Stack
+
+- **Language:** Python 3
+- **LLM:** Google Gemini
+- **RAG:** Custom lightweight retrieval pipeline using semantic similarity and keyword matching
+- **Embeddings:** Hugging Face embedding model
+- **Knowledge base:** Markdown documents with YAML-style front matter
+- **Order data:** JSON (`data/orders.json`)
+- **Storage:** In-memory document/chunk index
+- **Interface:** Command-line chatbot
+- **Evaluation:** Custom deterministic evaluation suite with visible and candidate-authored regression cases
+
+## Setup and Run
+
+### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd ai-agent-intern-test-main
+
+### 2. Create and activate a virtual environment
+
+```bash
+python -m venv .venv
+
+Windows:
+
+```bash
+.venv\Scripts\activate
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+
+### 4. Configure environment variables
+
+Create a `.env` file from `.env.example` and add your Gemini API key.
+
+Example:
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+Do not commit `.env` or any real API credentials.
+
+### 5. Run the chatbot
+
+```bash
+python agent/chatbot.py
+```
+### 6. Run the evaluation suite
+
+```bash
+python evaluation/run_evaluation.py
+```
+
+The evaluation suite reports individual case results and category-level results.
+
+## Evaluation Results
+
+### Final Evaluation
+
+The final evaluation suite covers the supplied visible cases and five additional candidate-authored regression cases.
+
+The final run achieved:
+
+- **Cases passed:** 5/5
+- **Privacy:** 2/2
+- **Prompt security:** 1/1
+- **Abstention:** 1/1
+- **Source conflict:** 1/1
+
+Some evaluation cases may report API quota errors when the Gemini free-tier request quota is exhausted. These are environment/API-limit failures rather than assertion failures.
+
+The deterministic evaluation suite also verifies order normalization, cancelled-order handling, unavailable delivery estimates, privacy protection, tool usage, and missing order IDs.
+
+## Bug Diary
+
+### Bug 1 — Incorrect module import when running the chatbot
+
+**Reproduction:** Running `python agent/chatbot.py` initially failed with a `ModuleNotFoundError`.
+
+**Root cause:** The package import path was inconsistent when the chatbot was executed directly.
+
+**Fix:** Updated the import structure so the RAG module is resolved correctly from the project root.
+
+**Regression test:** `python -m py_compile agent/chatbot.py rag/retriever.py`
+
+---
+
+### Bug 2 — Sensitive customer information could appear in responses
+
+**Reproduction:** Asked the agent for a customer's email, address, internal note, and risk score.
+
+**Root cause:** Sensitive fields were present in the underlying order data and required an explicit privacy guard.
+
+**Fix:** Added a policy guard that refuses requests for customer email, addresses, internal notes, risk scores, and other internal information.
+
+**Regression test:** The `order-data-privacy` evaluation case verifies that these fields are not disclosed.
+
+---
+
+### Bug 3 — Cancelled orders could be associated with stale delivery information
+
+**Reproduction:** Asked when cancelled order `ORD-1004` would arrive.
+
+**Root cause:** A cancelled order must use its current status rather than any stale delivery information.
+
+**Fix:** The order lookup uses the current order status as authoritative and returns a safe message stating that a cancelled order will not be shipped.
+
+**Regression test:** The `cancelled-order-stale-eta` and `custom-cancelled-order` evaluation cases verify that no stale delivery estimate is reported.
+
+---
+
+### Bug 4 — Order IDs with harmless formatting differences failed to match
+
+**Reproduction:** Queried an order using `ord-1007` or with surrounding whitespace.
+
+**Root cause:** Raw user input was not normalized before lookup.
+
+**Fix:** Order IDs are normalized by trimming whitespace and converting them to uppercase.
+
+**Regression test:** The `custom-lowercase-order` evaluation case verifies successful lookup and the expected sanitized order result.
+
+## Known Limitations
+
+- The agent currently uses an in-memory retrieval index rather than a production vector database.
+- Gemini API availability and free-tier quotas can affect evaluation runs.
+- Human handoff is represented as a recommendation; no real support-ticket system is integrated.
+- The CLI is intended for demonstration and evaluation rather than production deployment.
+- The system supports the supplied mock order data and does not implement full customer authentication.
+- A production version would benefit from stronger automated paraphrase testing, persistent observability, and a production-grade retrieval store.
+
+## AI Coding Tools
+
+AI coding assistants were used during development for debugging, code review, and implementation support.
+
+- **ChatGPT:** Used for debugging Python errors, reviewing the RAG/retrieval design, improving the evaluation suite, and helping structure documentation.
+- **Other AI coding assistant:** Used for an independent review of the implementation and to identify potential bugs and edge cases.
+
+### Example of an Incorrect AI Suggestion
+
+During review, an AI assistant suggested that the Gemini model name should be changed because it believed the configured model name was invalid. However, the actual application was successfully reaching the configured Gemini model and returning a `429 RESOURCE_EXHAUSTED` response, confirming that the issue at that point was API quota exhaustion rather than a model-not-found error.
+
+This reinforced the need to verify AI-generated recommendations against actual application behavior and test results rather than accepting them blindly.
+
+## Observability
+
+The agent provides basic observability through its debug output, including:
+
+- Current user query.
+- Relevant conversation history.
+- Retrieved passages with metadata and relevance scores.
+- Tool calls and sanitized tool results.
+- Final generated response.
+- Errors, fallbacks, and human-handoff decisions.
+
+Sensitive customer information and API credentials are not logged.
+
+
+## Baseline vs Final Evaluation
+
+### Baseline
+
+The initial implementation identified several reliability issues, including privacy handling, order-data safety, and evaluation coverage. These issues were addressed through regression tests and targeted fixes during development.
+
+### Final
+
+The latest complete evaluation run produced:
+
+- **Cases passed:** 8/16
+- **Retrieval:** 2/2
+- **Multi-source grounding:** 0/1
+- **Conversation:** 0/1
+- **Groundedness:** 0/2
+- **Tool use:** 1/2
+- **Tool reliability:** 0/3
+- **Privacy:** 2/2
+- **Prompt security:** 1/1
+- **Abstention:** 1/1
+- **Source conflict:** 1/1
+
+Four later evaluation cases were affected by the Gemini API free-tier quota and returned `429 RESOURCE_EXHAUSTED` errors. The remaining failed cases exposed areas for further improvement in response wording, multi-turn grounding, and tool reliability.
+
+The evaluation suite also includes five candidate-authored regression cases covering order normalization, cancelled orders, unavailable delivery estimates, privacy, and missing order IDs.
+## Demo
+
+The demonstration covers:
+
+1. A knowledge-base return-policy question with source citations.
+2. An order lookup for `ORD-1007`.
+3. A multi-turn follow-up asking when the order will arrive.
+4. A privacy-sensitive request that is refused with human-support guidance.
+5. The evaluation suite running with individual case results.
+
+The demo is intended to show grounded retrieval, targeted order lookup, conversation context, and safe handling of sensitive information.
+
+## Demo
+
+[Watch the demo](demo.mp4)
